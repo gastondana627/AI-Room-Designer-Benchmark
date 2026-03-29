@@ -43,7 +43,7 @@ if FAL_API_KEY:
 else:
     print("⚠️ FAL_API_KEY not found in environment. Set it to enable generation.")
 
-DATASET_ROOT = os.environ.get('DATASET_ROOT', './data/')
+DATASET_ROOT = os.environ.get('DATASET_ROOT', '.')
 OUTPUT_DIR = os.environ.get('OUTPUT_DIR', './results/')
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -71,14 +71,18 @@ def run_fal_generation(row):
 
     image_path = os.path.join(DATASET_ROOT, row['image_file_path'])
     if not os.path.exists(image_path):
-        print(f"  ❌ Image not found: {image_path}")
-        return row
+        print(f"  ⚠️ Image not found locally: {image_path}. Attempting to use provided preview URL if available.")
+        uploaded_image_url = row.get('image_preview_url')
+    else:
+        try:
+            img = Image.open(image_path).convert('RGB')
+            uploaded_image_url = upload_image_to_fal(img, case_id)
+        except Exception as e:
+            print(f"  ❌ Upload/Load failed: {e}")
+            return row
 
-    try:
-        img = Image.open(image_path).convert('RGB')
-        uploaded_image_url = upload_image_to_fal(img, case_id)
-    except Exception as e:
-        print(f"  ❌ Upload/Load failed: {e}")
+    if not uploaded_image_url:
+        print(f"  ❌ No valid image URL to process.")
         return row
 
     inputs = {
@@ -97,25 +101,49 @@ def run_fal_generation(row):
             glb_response = requests.get(glb_url, timeout=60)
             with open(generated_3d_path, 'wb') as f:
                 f.write(glb_response.content)
+
             row['fal_generated_3d_path'] = generated_3d_path
             row['fal_api_cost_usd'] = result.get('cost_usd', np.nan)
+
+            # --- New Metric Calculation Logic ---
+            try:
+                mesh = trimesh.load(generated_3d_path)
+                if isinstance(mesh, trimesh.Scene):
+                    # Combine all meshes in the scene
+                    row['vertex_count'] = sum(len(m.vertices) for m in mesh.geometry.values())
+                    row['face_count'] = sum(len(m.faces) for m in mesh.geometry.values())
+                else:
+                    row['vertex_count'] = len(mesh.vertices)
+                    row['face_count'] = len(mesh.faces)
+                print(f"  ✅ Metrics calculated: {row['vertex_count']} vertices, {row['face_count']} faces.")
+            except Exception as e:
+                print(f"  ⚠️ Failed to calculate metrics: {e}")
+
     except Exception as e:
-        print(f"  ❌ Generation failed: {e}")
+        print(f"  ❌ Generation failed: {e}")
 
     return row
 
 def main():
-    csv_path = os.path.join(DATASET_ROOT, 'benchmark_manifest.csv')
+    csv_path = os.path.join(DATASET_ROOT, 'data/benchmark_manifest.csv')
     if not os.path.exists(csv_path):
-        print(f"❌ Manifest not found at {csv_path}. Creating a dummy one for demonstration.")
-        df = pd.DataFrame({'case_id': ['S02_001'], 'image_file_path': ['Data/S02_001.jpeg']})
-    else:
-        df = pd.read_csv(csv_path, header=1).drop(0)
-        df = df[df['case_id'].astype(str).str.contains('S02_', na=False)].reset_index(drop=True)
+        print(f"❌ Manifest not found at {csv_path}.")
+        return
 
+    df = pd.read_csv(csv_path)
     print(f"Loaded {len(df)} cases.")
-    # In a real run, you'd call run_fal_generation on the dataframe
-    # df.apply(run_fal_generation, axis=1)
+
+    # Process rows with tqdm progress bar
+    print("🚀 Starting benchmark processing...")
+    results = []
+    for index, row in tqdm(df.iterrows(), total=len(df)):
+        results.append(run_fal_generation(row))
+
+    processed_df = pd.DataFrame(results)
+
+    # Save back to manifest
+    processed_df.to_csv(csv_path, index=False)
+    print(f"✅ Manifest updated at {csv_path}")
 
 if __name__ == "__main__":
     main()

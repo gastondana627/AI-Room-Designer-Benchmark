@@ -1,0 +1,4 @@
+case_id,image_file_path,image_preview_url,fal_generated_3d_path,fal_api_cost_usd,vertex_count,face_count,quality_score
+S02_001,Data/S02_001.jpeg,https://images.unsplash.com/photo-1616489953149-75517400eeba?auto=format&fit=crop&q=80&w=400,,,0,0,9/10
+S02_002,Data/S02_002.jpeg,https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&q=80&w=400,,,0,0,8/10
+S02_003,Data/S02_003.jpeg,https://images.unsplash.com/photo-1616137422495-1e9e46e2aa77?auto=format&fit=crop&q=80&w=400,,,0,0,7/10

@@ -1,0 +1,7 @@
+pandas
+trimesh
+fal-client
+requests
+Pillow
+numpy
+tqdm
